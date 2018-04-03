@@ -60,13 +60,15 @@ var leakyFuncs = []func(){
 	},
 }
 
+var ffn = func(s string) bool { return true }
+
 func TestCheck(t *testing.T) {
 	// this works because the running goroutine is left running at the
 	// start of the next test case - so the previous leaks don't affect the
 	// check for the next one
 	for i, fn := range leakyFuncs {
 		checker := &testReporter{}
-		snapshot := CheckTimeout(checker, time.Second)
+		snapshot := CheckTimeout(checker, time.Second, ffn)
 		go fn()
 
 		snapshot()
@@ -80,7 +82,7 @@ func TestCheck(t *testing.T) {
 // be based on time after the test finishes rather than time after the test's
 // start.
 func TestSlowTest(t *testing.T) {
-	defer CheckTimeout(t, 1000 * time.Millisecond)()
+	defer CheckTimeout(t, 1000 * time.Millisecond, ffn)()
 
 	go time.Sleep(1500 * time.Millisecond)
 	time.Sleep(750 * time.Millisecond)
@@ -89,7 +91,7 @@ func TestSlowTest(t *testing.T) {
 func TestEmptyLeak(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	defer CheckContext(ctx, t)()
+	defer CheckContext(ctx, t, ffn)()
 	time.Sleep(time.Second)
 }
 
@@ -107,14 +109,14 @@ func TestChangingStackTrace(t *testing.T) {
 	}()
 	<-started
 	func() {
-		defer CheckTimeout(t, time.Second)()
+		defer CheckTimeout(t, time.Second, ffn)()
 		close(c1)
 	}()
 }
 
 func TestInterestingGoroutine(t *testing.T) {
 	s := "goroutine 123 [running]:\nmain.main()"
-	gr, err := interestingGoroutine(s)
+	gr, err := interestingGoroutine(s, ffn)
 	if err != nil {
 		t.Errorf("unexpected error: %s", err)
 	}
@@ -151,7 +153,7 @@ func TestInterestingGoroutine(t *testing.T) {
 		},
 	}
 	for i, s := range stacks {
-		gr, err := interestingGoroutine(s.stack)
+		gr, err := interestingGoroutine(s.stack, ffn)
 		if s.err == nil && err != nil {
 			t.Errorf("%d: error = %v; want nil", i, err)
 		} else if s.err != nil && (err == nil || err.Error() != s.err.Error()) {
